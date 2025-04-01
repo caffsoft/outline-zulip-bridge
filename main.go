@@ -16,31 +16,32 @@ import (
 )
 
 type OutlineWebhookPayload struct {
-	Event string `json:"event"`
-	Data  struct {
-		Document struct {
+	Event   string `json:"event"`
+	Payload struct {
+		ID    string `json:"id"`
+		Model struct {
 			ID        string `json:"id"`
 			Title     string `json:"title"`
 			URL       string `json:"url"`
+			Text      string `json:"text"`
 			UpdatedBy struct {
 				Name string `json:"name"`
 			} `json:"updatedBy"`
-			Text string `json:"text"`
-		} `json:"payload"`
-	} `json:"data"`
+		} `json:"model"`
+	} `json:"payload"`
 }
 
 func formatZulipMessage(payload OutlineWebhookPayload, baseURL string) string {
-	title := payload.Data.Document.Title
-	docURL := fmt.Sprintf("%s%s", baseURL, payload.Data.Document.URL)
-	updatedBy := payload.Data.Document.UpdatedBy.Name
-	textSnippet := strings.Split(payload.Data.Document.Text, "\n")[0] // Get first paragraph
+	title := payload.Payload.Model.Title
+	docURL := fmt.Sprintf("%s%s", baseURL, payload.Payload.Model.URL)
+	updatedBy := payload.Payload.Model.UpdatedBy.Name
+	textSnippet := strings.Split(payload.Payload.Model.Text, "\n")[0] // Get first paragraph
 
 	if textSnippet != "" {
-		return fmt.Sprintf("%s: [%s](%s) was updated by %s\n\n %s\n\n_(Click the title to view the full document.)_", payload.Event, title, docURL, updatedBy, textSnippet)
+		return fmt.Sprintf("%s: [%s](%s) was updated by %s\n\n%s\n\n_(Click the title to view the full document.)_", payload.Event, title, docURL, updatedBy, textSnippet)
 	}
 
-	return fmt.Sprintf("%s: *[%s](%s)* was updated by **%s**", payload.Event, title, docURL, updatedBy)
+	return fmt.Sprintf("%s: [%s](%s) was updated by %s", payload.Event, title, docURL, updatedBy)
 }
 
 func sendToZulip(message string, zulipStream string, zulipTopic string, zulipWebhookURL string) {
@@ -131,7 +132,7 @@ func outlineWebhookHandler(zulipStream, zulipTopic, zulipWebhookURL, webhookSecr
 
 		//if payload.Event == "documents.create" || payload.Event == "documents.update" {
 		message := formatZulipMessage(payload, baseURL)
-		log.Printf("Received '%s' for document: %s", payload.Event, payload.Data.Document.Title)
+		log.Printf("Received '%s' for document: %s", payload.Event, payload.Payload.Model.Title)
 		sendToZulip(message, zulipStream, zulipTopic, zulipWebhookURL)
 		//} else {
 		//	log.Printf("Ignoring event: %s", payload.Event)
