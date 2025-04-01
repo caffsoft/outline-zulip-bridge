@@ -48,6 +48,11 @@ func sendToZulip(title string, docURL string, zulipStream string, zulipTopic str
 
 func outlineWebhookHandler(zulipStream, zulipTopic, zulipWebhookURL, webhookSecret string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		log.Println("🔍 Incoming headers:")
+		for k, v := range r.Header {
+			log.Printf("%s: %v", k, v)
+		}
+
 		// Read the raw request body
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
@@ -101,7 +106,7 @@ func main() {
 	}
 
 	if zulipWebhook == "" || zulipStream == "" || zulipTopic == "" || webhookSecret == "" {
-		log.Fatal("Missing required environment variables: ZULIP_WEBHOOK_URL, ZULIP_STREAM, ZULIP_TOPIC")
+		log.Fatal("Missing required environment variables: ZULIP_WEBHOOK_URL, ZULIP_STREAM, ZULIP_TOPIC, or OUTLINE_WEBHOOK_SECRET")
 	}
 
 	http.HandleFunc("/outline-webhook", outlineWebhookHandler(zulipStream, zulipTopic, zulipWebhook, webhookSecret))
