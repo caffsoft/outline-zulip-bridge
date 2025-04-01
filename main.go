@@ -48,10 +48,10 @@ func sendToZulip(title string, docURL string, zulipStream string, zulipTopic str
 
 func outlineWebhookHandler(zulipStream, zulipTopic, zulipWebhookURL, webhookSecret string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		log.Println("🔍 Incoming headers:")
-		for k, v := range r.Header {
-			log.Printf("%s: %v", k, v)
-		}
+		//log.Println("🔍 Incoming headers:")
+		//for k, v := range r.Header {
+		//	log.Printf("%s: %v", k, v)
+		//}
 
 		// Read the raw request body
 		body, err := io.ReadAll(r.Body)
@@ -63,13 +63,29 @@ func outlineWebhookHandler(zulipStream, zulipTopic, zulipWebhookURL, webhookSecr
 		// Reset body for JSON decoding
 		r.Body = io.NopCloser(bytes.NewBuffer(body))
 
+		// Get the signature header from the request
+		sigHeader := r.Header.Get("Outline-Signature")
+		var actualSig string
+		for _, part := range bytes.Split([]byte(sigHeader), []byte{','}) {
+			kv := bytes.SplitN(part, []byte{'='}, 2)
+			if len(kv) == 2 && bytes.Equal(kv[0], []byte("s")) {
+				actualSig = string(kv[1])
+				break
+			}
+		}
+
+		if actualSig == "" {
+			log.Println("⚠️ Signature missing from Outline-Signature header")
+			http.Error(w, "missing signature", http.StatusForbidden)
+			return
+		}
+
 		// Validate HMAC signature
-		sigHeader := r.Header.Get("X-Outline-Signature")
 		mac := hmac.New(sha256.New, []byte(webhookSecret))
 		mac.Write(body)
 		expectedSig := hex.EncodeToString(mac.Sum(nil))
-		if !hmac.Equal([]byte(expectedSig), []byte(sigHeader)) {
-			log.Println("Invalid Outline webhook signature")
+		if !hmac.Equal([]byte(expectedSig), []byte(actualSig)) {
+			log.Printf("❌ Signature mismatch\nExpected: %s\nActual  : %s", expectedSig, actualSig)
 			http.Error(w, "invalid signature", http.StatusForbidden)
 			return
 		}
