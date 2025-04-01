@@ -7,7 +7,7 @@ on:
 
 jobs:
   release:
-    runs-on: docker  # for Gitea runners that support Docker builds
+    runs-on: runner
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
