@@ -63,6 +63,8 @@ func outlineWebhookHandler(zulipStream, zulipTopic, zulipWebhookURL, webhookSecr
 		// Reset body for JSON decoding
 		r.Body = io.NopCloser(bytes.NewBuffer(body))
 
+		log.Printf("Body: '%s'", string(body))
+
 		// Get the signature header from the request
 		sigHeader := r.Header.Get("Outline-Signature")
 
@@ -98,7 +100,9 @@ func outlineWebhookHandler(zulipStream, zulipTopic, zulipWebhookURL, webhookSecr
 
 		if !hmac.Equal([]byte(expectedSig), []byte(actualSig)) {
 			log.Printf("❌ Signature mismatch\nExpected: %s\nActual  : %s", expectedSig, actualSig)
-			http.Error(w, "invalid signature", http.StatusForbidden)
+			//http.Error(w, "invalid signature", http.StatusForbidden)
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("ok"))
 			return
 		}
 
