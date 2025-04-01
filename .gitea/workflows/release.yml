@@ -1,0 +1,39 @@
+name: Build & Release
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+jobs:
+  release:
+    runs-on: docker  # for Gitea runners that support Docker builds
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set tag
+        run: |
+          if git describe --tags --exact-match >/dev/null 2>&1; then
+            echo "GIT_TAG=$(git describe --tags)" >> $GITHUB_ENV
+          else
+            echo "GIT_TAG=latest" >> $GITHUB_ENV
+          fi
+
+      - name: Docker login
+        run: |
+          echo "${{ secrets.CAFFSOFT_REGISTRY_PASSWORD }}" | \
+            docker login git.caffsoft.dev -u "${{ secrets.CAFFSOFT_REGISTRY_USER }}" --password-stdin
+
+      - name: Build Docker image
+        run: |
+          docker build -f release.dockerfile \
+            -t git.caffsoft.dev/vueterix/outline-zulip-bridge:latest \
+            -t git.caffsoft.dev/vueterix/outline-zulip-bridge:${{ env.GIT_TAG }} .
+
+      - name: Push Docker images
+        run: |
+          docker push git.caffsoft.dev/vueterix/outline-zulip-bridge:latest
+          if [ "${{ env.GIT_TAG }}" != "latest" ]; then
+            docker push git.caffsoft.dev/vueterix/outline-zulip-bridge:${{ env.GIT_TAG }}
+          fi
