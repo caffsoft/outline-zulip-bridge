@@ -90,10 +90,10 @@ func outlineWebhookHandler(zulipStream, zulipTopic, zulipWebhookURL, webhookSecr
 		}
 
 		// Construct the payload: "t=...<raw body>"
-		signedPayload := []byte(fmt.Sprintf("t=%s.%s", timestamp, body))
+		//signedPayload := []byte(fmt.Sprintf("t=%s.%s", timestamp, body))
 
 		mac := hmac.New(sha256.New, []byte(webhookSecret))
-		mac.Write(signedPayload)
+		mac.Write(body)
 		expectedSig := hex.EncodeToString(mac.Sum(nil))
 
 		if !hmac.Equal([]byte(expectedSig), []byte(actualSig)) {
