@@ -1,8 +1,13 @@
 package main
 
 import (
+	"bytes"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -41,8 +46,29 @@ func sendToZulip(title string, docURL string, zulipStream string, zulipTopic str
 	}
 }
 
-func outlineWebhookHandler(zulipStream, zulipTopic, zulipWebhookURL string) http.HandlerFunc {
+func outlineWebhookHandler(zulipStream, zulipTopic, zulipWebhookURL, webhookSecret string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		// Read the raw request body
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			log.Printf("Failed to read request body: %v", err)
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		// Reset body for JSON decoding
+		r.Body = io.NopCloser(bytes.NewBuffer(body))
+
+		// Validate HMAC signature
+		sigHeader := r.Header.Get("X-Outline-Signature")
+		mac := hmac.New(sha256.New, []byte(webhookSecret))
+		mac.Write(body)
+		expectedSig := hex.EncodeToString(mac.Sum(nil))
+		if !hmac.Equal([]byte(expectedSig), []byte(sigHeader)) {
+			log.Println("Invalid Outline webhook signature")
+			http.Error(w, "invalid signature", http.StatusForbidden)
+			return
+		}
+
 		var payload OutlineWebhookPayload
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 			log.Printf("Invalid webhook payload: %v", err)
@@ -67,16 +93,18 @@ func main() {
 	zulipWebhook := os.Getenv("ZULIP_WEBHOOK_URL")
 	zulipStream := os.Getenv("ZULIP_STREAM")
 	zulipTopic := os.Getenv("ZULIP_TOPIC")
+	webhookSecret := os.Getenv("OUTLINE_WEBHOOK_SECRET")
+
 	listenPort := os.Getenv("PORT")
 	if listenPort == "" {
 		listenPort = "8484"
 	}
 
-	if zulipWebhook == "" || zulipStream == "" || zulipTopic == "" {
+	if zulipWebhook == "" || zulipStream == "" || zulipTopic == "" || webhookSecret == "" {
 		log.Fatal("Missing required environment variables: ZULIP_WEBHOOK_URL, ZULIP_STREAM, ZULIP_TOPIC")
 	}
 
-	http.HandleFunc("/outline-webhook", outlineWebhookHandler(zulipStream, zulipTopic, zulipWebhook))
+	http.HandleFunc("/outline-webhook", outlineWebhookHandler(zulipStream, zulipTopic, zulipWebhook, webhookSecret))
 
 	log.Printf("Listening on :%s for Outline webhooks...", listenPort)
 	if err := http.ListenAndServe(":"+listenPort, nil); err != nil {
