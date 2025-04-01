@@ -65,25 +65,37 @@ func outlineWebhookHandler(zulipStream, zulipTopic, zulipWebhookURL, webhookSecr
 
 		// Get the signature header from the request
 		sigHeader := r.Header.Get("Outline-Signature")
-		var actualSig string
+
+		var actualSig, timestamp string
 		for _, part := range bytes.Split([]byte(sigHeader), []byte{','}) {
 			kv := bytes.SplitN(part, []byte{'='}, 2)
-			if len(kv) == 2 && bytes.Equal(kv[0], []byte("s")) {
-				actualSig = string(kv[1])
-				break
+			if len(kv) != 2 {
+				continue
+			}
+			key := string(bytes.TrimSpace(kv[0]))
+			value := string(bytes.TrimSpace(kv[1]))
+
+			switch key {
+			case "s":
+				actualSig = value
+			case "t":
+				timestamp = value
 			}
 		}
 
-		if actualSig == "" {
-			log.Println("⚠️ Signature missing from Outline-Signature header")
-			http.Error(w, "missing signature", http.StatusForbidden)
+		if actualSig == "" || timestamp == "" {
+			log.Println("⚠️ Signature or timestamp missing from Outline-Signature header")
+			http.Error(w, "invalid signature header", http.StatusForbidden)
 			return
 		}
 
-		// Validate HMAC signature
+		// Construct the payload: "t=...<raw body>"
+		signedPayload := []byte(fmt.Sprintf("t=%s.%s", timestamp, body))
+
 		mac := hmac.New(sha256.New, []byte(webhookSecret))
-		mac.Write(body)
+		mac.Write(signedPayload)
 		expectedSig := hex.EncodeToString(mac.Sum(nil))
+
 		if !hmac.Equal([]byte(expectedSig), []byte(actualSig)) {
 			log.Printf("❌ Signature mismatch\nExpected: %s\nActual  : %s", expectedSig, actualSig)
 			http.Error(w, "invalid signature", http.StatusForbidden)
