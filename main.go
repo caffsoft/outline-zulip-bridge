@@ -26,7 +26,7 @@ type OutlineWebhookPayload struct {
 				Name string `json:"name"`
 			} `json:"updatedBy"`
 			Text string `json:"text"`
-		} `json:"document"`
+		} `json:"payload"`
 	} `json:"data"`
 }
 
@@ -37,10 +37,10 @@ func formatZulipMessage(payload OutlineWebhookPayload, baseURL string) string {
 	textSnippet := strings.Split(payload.Data.Document.Text, "\n")[0] // Get first paragraph
 
 	if textSnippet != "" {
-		return fmt.Sprintf("*[%s](%s)* was updated by **%s**\n\n> %s\n\n_(Click the title to view the full document.)_", title, docURL, updatedBy, textSnippet)
+		return fmt.Sprintf("%s: [%s](%s) was updated by %s\n\n %s\n\n_(Click the title to view the full document.)_", payload.Event, title, docURL, updatedBy, textSnippet)
 	}
 
-	return fmt.Sprintf("*[%s](%s)* was updated by **%s**", title, docURL, updatedBy)
+	return fmt.Sprintf("%s: *[%s](%s)* was updated by **%s**", payload.Event, title, docURL, updatedBy)
 }
 
 func sendToZulip(message string, zulipStream string, zulipTopic string, zulipWebhookURL string) {
@@ -79,7 +79,7 @@ func outlineWebhookHandler(zulipStream, zulipTopic, zulipWebhookURL, webhookSecr
 		// Reset body for JSON decoding
 		r.Body = io.NopCloser(bytes.NewBuffer(body))
 
-		//log.Printf("Body: '%s'", string(body))
+		log.Printf("Body: '%s'", string(body))
 
 		// Get the signature header from the request
 		sigHeader := r.Header.Get("Outline-Signature")
