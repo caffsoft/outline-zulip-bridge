@@ -129,13 +129,13 @@ func outlineWebhookHandler(zulipStream, zulipTopic, zulipWebhookURL, webhookSecr
 			return
 		}
 
-		if payload.Event == "documents.create" || payload.Event == "documents.update" {
-			message := formatZulipMessage(payload, baseURL)
-			log.Printf("Received '%s' for document: %s", payload.Event, payload.Data.Document.Title)
-			sendToZulip(message, zulipStream, zulipTopic, zulipWebhookURL)
-		} else {
-			log.Printf("Ignoring event: %s", payload.Event)
-		}
+		//if payload.Event == "documents.create" || payload.Event == "documents.update" {
+		message := formatZulipMessage(payload, baseURL)
+		log.Printf("Received '%s' for document: %s", payload.Event, payload.Data.Document.Title)
+		sendToZulip(message, zulipStream, zulipTopic, zulipWebhookURL)
+		//} else {
+		//	log.Printf("Ignoring event: %s", payload.Event)
+		//}
 
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
