@@ -12,22 +12,38 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 )
 
 type OutlineWebhookPayload struct {
 	Event string `json:"event"`
 	Data  struct {
 		Document struct {
-			ID    string `json:"id"`
-			Title string `json:"title"`
-			URL   string `json:"url"`
+			ID        string `json:"id"`
+			Title     string `json:"title"`
+			URL       string `json:"url"`
+			UpdatedBy struct {
+				Name string `json:"name"`
+			} `json:"updatedBy"`
+			Text string `json:"text"`
 		} `json:"document"`
 	} `json:"data"`
 }
 
-func sendToZulip(title string, docURL string, zulipStream string, zulipTopic string, zulipWebhookURL string) {
-	message := fmt.Sprintf("Document Updated: [%s](%s)", title, docURL)
+func formatZulipMessage(payload OutlineWebhookPayload, baseURL string) string {
+	title := payload.Data.Document.Title
+	docURL := fmt.Sprintf("%s%s", baseURL, payload.Data.Document.URL)
+	updatedBy := payload.Data.Document.UpdatedBy.Name
+	textSnippet := strings.Split(payload.Data.Document.Text, "\n")[0] // Get first paragraph
 
+	if textSnippet != "" {
+		return fmt.Sprintf("*[%s](%s)* was updated by **%s**\n\n> %s\n\n_(Click the title to view the full document.)_", title, docURL, updatedBy, textSnippet)
+	}
+
+	return fmt.Sprintf("*[%s](%s)* was updated by **%s**", title, docURL, updatedBy)
+}
+
+func sendToZulip(message string, zulipStream string, zulipTopic string, zulipWebhookURL string) {
 	form := url.Values{}
 	form.Set("type", "stream")
 	form.Set("to", zulipStream)
@@ -46,7 +62,7 @@ func sendToZulip(title string, docURL string, zulipStream string, zulipTopic str
 	}
 }
 
-func outlineWebhookHandler(zulipStream, zulipTopic, zulipWebhookURL, webhookSecret string) http.HandlerFunc {
+func outlineWebhookHandler(zulipStream, zulipTopic, zulipWebhookURL, webhookSecret, baseURL string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		//log.Println("🔍 Incoming headers:")
 		//for k, v := range r.Header {
@@ -63,7 +79,7 @@ func outlineWebhookHandler(zulipStream, zulipTopic, zulipWebhookURL, webhookSecr
 		// Reset body for JSON decoding
 		r.Body = io.NopCloser(bytes.NewBuffer(body))
 
-		log.Printf("Body: '%s'", string(body))
+		//log.Printf("Body: '%s'", string(body))
 
 		// Get the signature header from the request
 		sigHeader := r.Header.Get("Outline-Signature")
@@ -86,7 +102,7 @@ func outlineWebhookHandler(zulipStream, zulipTopic, zulipWebhookURL, webhookSecr
 		}
 
 		if actualSig == "" || timestamp == "" {
-			log.Println("⚠️ Signature or timestamp missing from Outline-Signature header")
+			log.Println("Signature or timestamp missing from Outline-Signature header")
 			http.Error(w, "invalid signature header", http.StatusForbidden)
 			return
 		}
@@ -99,10 +115,10 @@ func outlineWebhookHandler(zulipStream, zulipTopic, zulipWebhookURL, webhookSecr
 		expectedSig := hex.EncodeToString(mac.Sum(nil))
 
 		if !hmac.Equal([]byte(expectedSig), []byte(actualSig)) {
-			log.Printf("❌ Signature mismatch\nExpected: %s\nActual  : %s", expectedSig, actualSig)
-			//http.Error(w, "invalid signature", http.StatusForbidden)
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte("ok"))
+			log.Printf("Signature mismatch\nExpected: %s\nActual  : %s", expectedSig, actualSig)
+			http.Error(w, "invalid signature", http.StatusForbidden)
+			//w.WriteHeader(http.StatusOK)
+			//_, _ = w.Write([]byte("ok"))
 			return
 		}
 
@@ -114,11 +130,11 @@ func outlineWebhookHandler(zulipStream, zulipTopic, zulipWebhookURL, webhookSecr
 		}
 
 		if payload.Event == "documents.create" || payload.Event == "documents.update" {
-			title := payload.Data.Document.Title
-			docURL := payload.Data.Document.URL
-
-			log.Printf("Received '%s' for document: %s", payload.Event, title)
-			sendToZulip(title, docURL, zulipStream, zulipTopic, zulipWebhookURL)
+			message := formatZulipMessage(payload, baseURL)
+			log.Printf("Received '%s' for document: %s", payload.Event, payload.Data.Document.Title)
+			sendToZulip(message, zulipStream, zulipTopic, zulipWebhookURL)
+		} else {
+			log.Printf("Ignoring event: %s", payload.Event)
 		}
 
 		w.WriteHeader(http.StatusOK)
@@ -131,6 +147,7 @@ func main() {
 	zulipStream := os.Getenv("ZULIP_STREAM")
 	zulipTopic := os.Getenv("ZULIP_TOPIC")
 	webhookSecret := os.Getenv("OUTLINE_WEBHOOK_SECRET")
+	baseURL := os.Getenv("OUTLINE_BASE_URL")
 
 	listenPort := os.Getenv("PORT")
 	if listenPort == "" {
@@ -141,7 +158,7 @@ func main() {
 		log.Fatal("Missing required environment variables: ZULIP_WEBHOOK_URL, ZULIP_STREAM, ZULIP_TOPIC, or OUTLINE_WEBHOOK_SECRET")
 	}
 
-	http.HandleFunc("/outline-webhook", outlineWebhookHandler(zulipStream, zulipTopic, zulipWebhook, webhookSecret))
+	http.HandleFunc("/outline-webhook", outlineWebhookHandler(zulipStream, zulipTopic, zulipWebhook, webhookSecret, baseURL))
 
 	log.Printf("Listening on :%s for Outline webhooks...", listenPort)
 	if err := http.ListenAndServe(":"+listenPort, nil); err != nil {
