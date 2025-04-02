@@ -1,3 +1,11 @@
+// Copyright © 2025 Caffeinated Softworks, LLC All Rights Reserved.
+//
+// Author: Marc Lewis
+// Email: marc@caffeinatedsoftworks.com
+//
+// This source code is licensed under the MIT license found in the
+// LICENSE file in the root directory of this source tree.
+
 package main
 
 import (
@@ -105,7 +113,12 @@ func sendToZulip(message string, zulipStream string, zulipTopic string, zulipWeb
 		log.Printf("Failed to send message to Zulip: %v", err)
 		return
 	}
-	defer resp.Body.Close()
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			log.Printf("Failed to close response body: %v", err)
+		}
+	}(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
 		log.Printf("Zulip responded with status: %s", resp.Status)
@@ -129,7 +142,7 @@ func outlineWebhookHandler(zulipStream, zulipTopic, zulipWebhookURL, webhookSecr
 		// Reset body for JSON decoding
 		r.Body = io.NopCloser(bytes.NewBuffer(body))
 
-		log.Printf("Body: '%s'", string(body))
+		//log.Printf("Body: '%s'", string(body))
 
 		// Get the signature header from the request
 		sigHeader := r.Header.Get("Outline-Signature")
@@ -167,8 +180,6 @@ func outlineWebhookHandler(zulipStream, zulipTopic, zulipWebhookURL, webhookSecr
 		if !hmac.Equal([]byte(expectedSig), []byte(actualSig)) {
 			log.Printf("Signature mismatch\nExpected: %s\nActual  : %s", expectedSig, actualSig)
 			http.Error(w, "invalid signature", http.StatusForbidden)
-			//w.WriteHeader(http.StatusOK)
-			//_, _ = w.Write([]byte("ok"))
 			return
 		}
 
@@ -179,13 +190,9 @@ func outlineWebhookHandler(zulipStream, zulipTopic, zulipWebhookURL, webhookSecr
 			return
 		}
 
-		//if payload.Event == "documents.create" || payload.Event == "documents.update" {
 		message := formatZulipMessage(payload, baseURL)
 		log.Printf("Received '%s' for document: %s", payload.Event, payload.Payload.Model.Title)
 		sendToZulip(message, zulipStream, zulipTopic, zulipWebhookURL)
-		//} else {
-		//	log.Printf("Ignoring event: %s", payload.Event)
-		//}
 
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
@@ -205,7 +212,7 @@ func main() {
 	}
 
 	if zulipWebhook == "" || zulipStream == "" || zulipTopic == "" || webhookSecret == "" {
-		log.Fatal("Missing required environment variables: ZULIP_WEBHOOK_URL, ZULIP_STREAM, ZULIP_TOPIC, or OUTLINE_WEBHOOK_SECRET")
+		log.Fatal("Missing one or more required environment variables: ZULIP_WEBHOOK_URL, ZULIP_STREAM, ZULIP_TOPIC, or OUTLINE_WEBHOOK_SECRET")
 	}
 
 	http.HandleFunc("/outline-webhook", outlineWebhookHandler(zulipStream, zulipTopic, zulipWebhook, webhookSecret, baseURL))

@@ -1,4 +1,4 @@
-name: Build Docker Image for Outline-Zulip Bridge
+name: Build Docker Image for Outline-Zulip-Bridge
 run-name: ${{ gitea.actor }} is releasing ${{ gitea.repository }}
 
 on:
@@ -33,19 +33,19 @@ jobs:
       - name: Login to Docker Registry
         uses: docker/login-action@v1
         with:
-          registry: git.caffsoft.dev
+          registry: ${{ env.REGISTRY }}
           username: ${{ secrets.REGISTRY_USERNAME }}
           password: ${{ secrets.REGISTRY_PASSWORD }}
 
       - name: Build Docker Image
         run: |
           docker build -f release.dockerfile \
-            -t git.caffsoft.dev/vueterix/outline-zulip-bridge:latest \
-            -t git.caffsoft.dev/vueterix/outline-zulip-bridge:${{ steps.tag.outputs.tag }} .
+            -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME}}:latest \
+            -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME}}:${{ steps.tag.outputs.tag }} .
 
       - name: Push Docker Images
         run: |
-          docker push git.caffsoft.dev/vueterix/outline-zulip-bridge:latest
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME}}:latest
           if [ "${{ steps.tag.outputs.tag }}" != "latest" ]; then
-            docker push git.caffsoft.dev/vueterix/outline-zulip-bridge:${{ steps.tag.outputs.tag }}
+            docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME}}:${{ steps.tag.outputs.tag }}
           fi
