@@ -53,10 +53,10 @@ func formatZulipMessage(payload OutlineWebhookPayload, baseURL string) string {
 	textSnippet := strings.Split(payload.Payload.Model.Text, "\n")[0] // First paragraph
 
 	if textSnippet != "" {
-		return fmt.Sprintf("%s: [%s](%s) was updated by %s\n\n%s\n\n_(Click the title to view the full document.)_", payload.Event, title, docURL, updatedBy, textSnippet)
+		return fmt.Sprintf("[%s](%s) was updated by %s\n\n%s", title, docURL, updatedBy, textSnippet)
 	}
 
-	return fmt.Sprintf("%s: [%s](%s) was updated by %s", payload.Event, title, docURL, updatedBy)
+	return fmt.Sprintf("[%s](%s) was updated by %s", title, docURL, updatedBy)
 }
 
 func sendToZulip(message string, zulipStream string, zulipTopic string, zulipWebhookURL string) {
