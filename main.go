@@ -20,10 +20,14 @@ type OutlineWebhookPayload struct {
 	Payload struct {
 		ID    string `json:"id"`
 		Model struct {
-			ID        string `json:"id"`
-			Title     string `json:"title"`
-			URL       string `json:"url"`
-			Text      string `json:"text"`
+			ID         string `json:"id"`
+			Title      string `json:"title"`
+			URL        string `json:"url"`
+			DocumentID string `json:"documentId"`
+			Text       string `json:"text"`
+			CreatedBy  struct {
+				Name string `json:"name"`
+			} `json:"createdBy"`
 			UpdatedBy struct {
 				Name string `json:"name"`
 			} `json:"updatedBy"`
@@ -33,9 +37,20 @@ type OutlineWebhookPayload struct {
 
 func formatZulipMessage(payload OutlineWebhookPayload, baseURL string) string {
 	title := payload.Payload.Model.Title
-	docURL := fmt.Sprintf("%s%s", baseURL, payload.Payload.Model.URL)
+	docURL := ""
+	if payload.Payload.Model.URL != "" {
+		docURL = fmt.Sprintf("%s%s", baseURL, payload.Payload.Model.URL)
+	} else if payload.Payload.Model.DocumentID != "" {
+		docURL = fmt.Sprintf("%s/doc/%s", baseURL, payload.Payload.Model.DocumentID)
+	}
+
+	// Prefer UpdatedBy, fallback to CreatedBy
 	updatedBy := payload.Payload.Model.UpdatedBy.Name
-	textSnippet := strings.Split(payload.Payload.Model.Text, "\n")[0] // Get first paragraph
+	if updatedBy == "" {
+		updatedBy = payload.Payload.Model.CreatedBy.Name
+	}
+
+	textSnippet := strings.Split(payload.Payload.Model.Text, "\n")[0] // First paragraph
 
 	if textSnippet != "" {
 		return fmt.Sprintf("%s: [%s](%s) was updated by %s\n\n%s\n\n_(Click the title to view the full document.)_", payload.Event, title, docURL, updatedBy, textSnippet)
