@@ -36,27 +36,61 @@ type OutlineWebhookPayload struct {
 }
 
 func formatZulipMessage(payload OutlineWebhookPayload, baseURL string) string {
-	title := payload.Payload.Model.Title
+	event := payload.Event
+	model := payload.Payload.Model
+
+	// Determine who performed the action
+	actor := model.UpdatedBy.Name
+	if actor == "" {
+		actor = model.CreatedBy.Name
+	}
+
+	// Construct the document URL
 	docURL := ""
-	if payload.Payload.Model.URL != "" {
-		docURL = fmt.Sprintf("%s%s", baseURL, payload.Payload.Model.URL)
-	} else if payload.Payload.Model.DocumentID != "" {
-		docURL = fmt.Sprintf("%s/doc/%s", baseURL, payload.Payload.Model.DocumentID)
+	if model.URL != "" {
+		docURL = fmt.Sprintf("%s%s", baseURL, model.URL)
+	} else if model.DocumentID != "" {
+		docURL = fmt.Sprintf("%s/doc/%s", baseURL, model.DocumentID)
 	}
 
-	// Prefer UpdatedBy, fallback to CreatedBy
-	updatedBy := payload.Payload.Model.UpdatedBy.Name
-	if updatedBy == "" {
-		updatedBy = payload.Payload.Model.CreatedBy.Name
+	// Determine action verb from event name
+	action := "performed an action on"
+	if strings.Contains(event, "create") {
+		action = "created"
+	} else if strings.Contains(event, "update") {
+		action = "updated"
+	} else if strings.Contains(event, "delete") {
+		action = "deleted"
 	}
 
-	textSnippet := strings.Split(payload.Payload.Model.Text, "\n")[0] // First paragraph
+	// Generate the heading
+	heading := fmt.Sprintf("**%s** %s [%s](%s)", actor, action, model.Title, docURL)
 
-	if textSnippet != "" {
-		return fmt.Sprintf("[%s](%s) was updated by %s\n\n%s", title, docURL, updatedBy, textSnippet)
+	// Use first non-empty line from updated text as snippet
+	text := strings.TrimSpace(model.Text)
+	lines := strings.Split(text, "\n")
+
+	snippet := ""
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			snippet = line
+			break
+		}
 	}
 
-	return fmt.Sprintf("[%s](%s) was updated by %s", title, docURL, updatedBy)
+	// Truncate snippet to 200 characters max
+	const maxLen = 200
+	if len(snippet) > maxLen {
+		snippet = snippet[:maxLen] + "…"
+	}
+
+	// Return message with quote block if available and not a delete
+	if snippet != "" && action != "deleted" {
+		return fmt.Sprintf("%s\n\n> %s", heading, snippet)
+	}
+
+	return heading
 }
 
 func sendToZulip(message string, zulipStream string, zulipTopic string, zulipWebhookURL string) {
@@ -80,7 +114,7 @@ func sendToZulip(message string, zulipStream string, zulipTopic string, zulipWeb
 
 func outlineWebhookHandler(zulipStream, zulipTopic, zulipWebhookURL, webhookSecret, baseURL string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		//log.Println("🔍 Incoming headers:")
+		//log.Println("Incoming headers:")
 		//for k, v := range r.Header {
 		//	log.Printf("%s: %v", k, v)
 		//}
