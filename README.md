@@ -22,11 +22,13 @@ formatted notifications to a [Zulip](https://zulip.com/) stream for each event i
 ### 1. Clone the repo
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/outline-zulip-webhook.git
+git clone https://github.com/caffsoft/outline-zulip-webhook.git
 cd outline-zulip-webhook
 ```
 
 ### 2. Build and run the app
+
+To build the app, it is required that Go v1.24+ be installed.
 
 ```bash
 make build
